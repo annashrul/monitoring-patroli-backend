@@ -33,6 +33,7 @@ export function createSocketServer(httpServer) {
     // Satpam: terima update lokasi, simpan ke DB & broadcast ke admin
     if (socket.user.role === 'satpam') {
       socket.on('location:update', async (data) => {
+        console.log(`📍 Lokasi ${socket.user.name}: ${data.latitude}, ${data.longitude}`);
         await supabase
           .from('users')
           .update({
