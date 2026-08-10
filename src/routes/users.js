@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { supabase } from '../supabase.js';
 import { requireRole } from '../middleware/auth.js';
+import { emitToUser } from '../socket.js';
 
 const router = Router();
 
@@ -70,7 +71,7 @@ router.put('/:id', async (req, res) => {
   res.json({ data });
 });
 
-// POST /api/users/:id/release — lepas device binding (admin/owner)
+// POST /api/users/:id/release — lepas device binding & kirim notif realtime
 router.post('/:id/release', async (req, res) => {
   const { error } = await supabase
     .from('users')
@@ -78,6 +79,7 @@ router.post('/:id/release', async (req, res) => {
     .eq('id', req.params.id);
 
   if (error) return res.status(500).json({ message: 'Gagal melepas sesi' });
+  emitToUser(req.params.id, 'session:released', {});
   res.json({ data: { id: req.params.id } });
 });
 
