@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { supabase } from '../supabase.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, getScopeFilter } from '../middleware/auth.js';
 import { emitToUser } from '../socket.js';
 
 const router = Router();
@@ -12,9 +12,14 @@ router.use(requireRole('admin', 'owner'));
 const ROLES = ['owner', 'admin', 'satpam'];
 const SAFE_SELECT = 'id, username, name, role, site_id, device_token, is_active, created_at';
 
-// GET /api/users
+// GET /api/users — owner lihat semua, admin lihat user di site-nya saja
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase.from('users').select(SAFE_SELECT).order('created_at');
+  let query = supabase.from('users').select(SAFE_SELECT).order('created_at');
+  const scope = await getScopeFilter(req);
+  if (scope) {
+    query = query.or(`site_id.eq.${scope},role.eq.owner`);
+  }
+  const { data, error } = await query;
   if (error) return res.status(500).json({ message: 'Gagal mengambil data user' });
   res.json({ data });
 });

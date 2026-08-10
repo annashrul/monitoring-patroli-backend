@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, getScopeFilter } from '../middleware/auth.js';
 import { getCurrentShiftInfo } from '../services/shiftService.js';
 
 const router = Router();
@@ -16,9 +16,14 @@ const normalize = (s) => ({
   is_active: s.is_active,
 });
 
-// GET /api/shifts — admin & satpam
+// GET /api/shifts — admin & satpam, admin dengan site_id hanya lihat shift sitenya
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase.from('shifts').select('*').order('start_time');
+  let query = supabase.from('shifts').select('*').order('start_time');
+  const scope = await getScopeFilter(req);
+  if (scope) {
+    query = query.or(`site_id.eq.${scope},site_id.is.null`);
+  }
+  const { data, error } = await query;
   if (error) return res.status(500).json({ message: 'Gagal mengambil data shift' });
   res.json({ data: (data || []).map(normalize) });
 });

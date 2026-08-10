@@ -1,18 +1,17 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, getScopeFilter } from '../middleware/auth.js';
 import { startOfDayInTimezone } from '../utils/time.js';
 
 const router = Router();
 
 // GET /api/scan-logs?site_id=&post_id=&user_id=&date=YYYY-MM-DD — admin
-router.get('/', requireRole('admin'), async (req, res) => {
+// admin dengan site_id otomatis difilter ke site-nya
+router.get('/', requireRole('admin', 'owner'), async (req, res) => {
   const { site_id, post_id, user_id, date } = req.query;
+  const scope = await getScopeFilter(req);
 
-  // !inner diperlukan agar bisa filter berdasarkan kolom tabel posts
-  const postSelect = site_id
-    ? 'post:posts!inner(id, name, site_id)'
-    : 'post:posts(id, name, site_id)';
+  const postSelect = 'post:posts!inner(id, name, site_id)';
 
   let q = supabase
     .from('scan_logs')
@@ -20,7 +19,8 @@ router.get('/', requireRole('admin'), async (req, res) => {
     .order('scanned_at', { ascending: false })
     .limit(500);
 
-  if (site_id) q = q.eq('posts.site_id', site_id);
+  const filterSite = site_id || scope;
+  if (filterSite) q = q.eq('posts.site_id', filterSite);
   if (post_id) q = q.eq('post_id', post_id);
   if (user_id) q = q.eq('user_id', user_id);
   if (date) {

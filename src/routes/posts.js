@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { supabase } from '../supabase.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, getScopeFilter } from '../middleware/auth.js';
 import { isPointInPolygon } from '../utils/geo.js';
+import { getPostsWithStatus } from '../services/postStatus.js';
 
 const router = Router();
 
@@ -24,6 +25,62 @@ function validLatLng(lat, lng) {
 function validRadius(r) {
   return Number.isInteger(r) && r >= 5 && r <= 500;
 }
+
+// GET /api/posts?all=true — owner lihat semua posts dari semua site dengan status
+router.get('/', async (req, res) => {
+  try {
+    if (req.query.all === 'true' && req.user?.role === 'owner') {
+      const { data: allPosts } = await supabase.from('posts').select('*').order('created_at');
+      if (!allPosts?.length) return res.json({ data: [] });
+
+      let period = null;
+      try {
+        const shiftService = await import('../services/shiftService.js');
+        ({ period } = await shiftService.getCurrentShiftInfo());
+      } catch { period = null; }
+
+      const lastByPost = new Map();
+      if (period) {
+        const { data: logs } = await supabase
+          .from('scan_logs')
+          .select('post_id, scanned_at, users(name)')
+          .in('post_id', allPosts.map((p) => p.id))
+          .eq('status', 'ok')
+          .gte('scanned_at', period.start.toISOString())
+          .lt('scanned_at', period.end.toISOString())
+          .order('scanned_at', { ascending: false });
+        for (const log of logs || []) {
+          if (!lastByPost.has(log.post_id)) {
+            lastByPost.set(log.post_id, {
+              scanned_at: log.scanned_at,
+              scanned_by_name: log.users?.name ?? '-',
+            });
+          }
+        }
+      }
+
+      const data = allPosts.map((p) => ({
+        id: p.id,
+        site_id: p.site_id,
+        name: p.name,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        radius_m: p.radius_m,
+        is_active: p.is_active,
+        status: lastByPost.has(p.id) ? 'scanned' : 'pending',
+        last_scan: lastByPost.get(p.id) ?? null,
+      }));
+      return res.json({ data });
+    }
+
+    const siteId = req.query.site_id;
+    if (!siteId) return res.status(400).json({ message: 'site_id atau all=true diperlukan' });
+    const posts = await getPostsWithStatus(siteId);
+    res.json({ data: posts });
+  } catch (e) {
+    res.status(500).json({ message: 'Gagal mengambil data pos' });
+  }
+});
 
 // POST /api/posts — admin
 router.post('/', requireRole('admin'), async (req, res) => {

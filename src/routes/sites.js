@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, getScopeFilter } from '../middleware/auth.js';
 import { getPostsWithStatus } from '../services/postStatus.js';
 
 const router = Router();
@@ -30,10 +30,14 @@ function isValidPolygon(polygon) {
   );
 }
 
-// GET /api/sites — admin & owner lihat semua, satpam hanya lihat yang aktif
+// GET /api/sites — admin & owner lihat semua, satpam hanya lihat yang aktif,
+// admin dengan site_id hanya lihat site-nya sendiri
 router.get('/', async (req, res) => {
   let query = supabase.from('sites').select('*').order('created_at');
-  if (req.user?.role === 'satpam') {
+  const scope = await getScopeFilter(req);
+  if (scope) {
+    query = query.eq('id', scope);
+  } else if (req.user?.role === 'satpam') {
     query = query.eq('is_active', true);
   }
   const { data, error } = await query;
@@ -42,10 +46,15 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/sites/:siteId/posts — admin & satpam (qr_token hanya untuk admin)
+// admin dengan site_id hanya bisa akses posts di site-nya
 router.get('/:siteId/posts', async (req, res) => {
   try {
+    const scope = await getScopeFilter(req);
+    if (scope && req.params.siteId !== scope) {
+      return res.status(403).json({ message: 'Anda tidak memiliki akses ke site ini' });
+    }
     const posts = await getPostsWithStatus(req.params.siteId);
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'owner';
     const data = posts.map((p) => ({
       id: p.id,
       site_id: p.site_id,

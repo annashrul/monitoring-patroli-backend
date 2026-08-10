@@ -27,7 +27,7 @@ export function requireRole(...roles) {
 
 export function signToken(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, name: user.name, role: user.role },
+    { id: user.id, username: user.username, name: user.name, role: user.role, site_id: user.site_id || null },
     config.jwtSecret,
     { expiresIn: '12h' }
   );
@@ -35,4 +35,23 @@ export function signToken(user) {
 
 export function verifyToken(token) {
   return jwt.verify(token, config.jwtSecret);
+}
+
+/** Helper: ambil site_id user untuk filtering (owner tidak difilter).
+ * Fallback: jika token belum ada site_id, lookup dari DB. */
+export async function getScopeFilter(req) {
+  const user = req.user;
+  if (!user || user.role === 'owner') return null;
+  if (user.site_id !== undefined) return user.site_id || null;
+
+  // Fallback: token lama belum ada site_id, ambil dari DB
+  try {
+    const { supabase } = await import('../supabase.js');
+    const { data } = await supabase.from('users').select('site_id').eq('id', user.id).maybeSingle();
+    if (data?.site_id) {
+      user.site_id = data.site_id; // cache di req.user
+      return data.site_id;
+    }
+  } catch { /* ignore */ }
+  return null;
 }
