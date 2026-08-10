@@ -63,15 +63,8 @@ router.post('/login', async (req, res) => {
   });
 });
 
-// POST /api/auth/logout — hapus device binding
+// POST /api/auth/logout — tidak hapus device binding (biarkan admin yang Lepas)
 router.post('/logout', async (req, res) => {
-  const auth = req.headers.authorization || '';
-  if (!auth.startsWith('Bearer ')) return res.json({ data: { ok: true } });
-  try {
-    const { verifyToken } = await import('../middleware/auth.js');
-    const user = verifyToken(auth.slice(7));
-    await supabase.from('users').update({ device_token: null }).eq('id', user.id);
-  } catch { /* ignore */ }
   res.json({ data: { ok: true } });
 });
 
