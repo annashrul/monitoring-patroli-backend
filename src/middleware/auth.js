@@ -27,7 +27,7 @@ export function requireRole(...roles) {
 
 export function signToken(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, name: user.name, role: user.role, site_id: user.site_id || null },
+    { id: user.id, username: user.username, name: user.name, role: user.role, site_id: user.site_id || null, color: user.color || '#3B82F6' },
     config.jwtSecret,
     { expiresIn: '12h' }
   );

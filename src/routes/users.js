@@ -10,7 +10,7 @@ const router = Router();
 router.use(requireRole('admin', 'owner'));
 
 const ROLES = ['owner', 'admin', 'satpam'];
-const SAFE_SELECT = 'id, username, name, role, site_id, device_token, is_active, created_at';
+const SAFE_SELECT = 'id, username, name, role, site_id, device_token, color, is_active, created_at';
 
 // GET /api/users — owner lihat semua, admin lihat user di site-nya saja
 router.get('/', async (req, res) => {
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/users
 router.post('/', async (req, res) => {
-  const { username, password, name, role, site_id } = req.body || {};
+  const { username, password, name, role, site_id, color } = req.body || {};
   if (!username || !password || !name || !ROLES.includes(role)) {
     return res
       .status(400)
@@ -37,6 +37,7 @@ router.post('/', async (req, res) => {
   const insertData = { username, password_hash, name, role };
   if (site_id) insertData.site_id = site_id;
   else if (role !== 'owner') insertData.site_id = null;
+  if (color) insertData.color = color;
 
   const { data, error } = await supabase
     .from('users')
@@ -53,7 +54,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/users/:id
 router.put('/:id', async (req, res) => {
-  const { name, role, site_id, is_active, password } = req.body || {};
+  const { name, role, site_id, color, is_active, password } = req.body || {};
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (role !== undefined) {
@@ -61,6 +62,7 @@ router.put('/:id', async (req, res) => {
     updates.role = role;
   }
   if (site_id !== undefined) updates.site_id = site_id || null;
+  if (color !== undefined) updates.color = color || '#3B82F6';
   if (is_active !== undefined) updates.is_active = !!is_active;
   if (password) updates.password_hash = await bcrypt.hash(password, 10);
 

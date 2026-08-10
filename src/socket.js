@@ -32,6 +32,11 @@ export function createSocketServer(httpServer) {
 
     // Satpam: terima update lokasi, simpan ke DB & broadcast ke admin
     if (socket.user.role === 'satpam') {
+      let userColor = '#3B82F6';
+      supabase.from('users').select('color').eq('id', socket.user.id).maybeSingle().then(({ data }) => {
+        if (data?.color) userColor = data.color;
+      });
+
       socket.on('location:update', async (data) => {
         console.log(`📍 Lokasi ${socket.user.name}: ${data.latitude}, ${data.longitude}`);
         await supabase
@@ -47,6 +52,7 @@ export function createSocketServer(httpServer) {
           name: socket.user.name,
           latitude: data.latitude,
           longitude: data.longitude,
+          color: userColor,
           timestamp: new Date().toISOString(),
         });
       });

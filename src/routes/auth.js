@@ -58,7 +58,7 @@ router.post('/login', async (req, res) => {
   res.json({
     data: {
       token: signToken(user),
-      user: { id: user.id, username: user.username, name: user.name, role: user.role, site_id: user.site_id },
+      user: { id: user.id, username: user.username, name: user.name, role: user.role, site_id: user.site_id, color: user.color || '#3B82F6' },
     },
   });
 });
