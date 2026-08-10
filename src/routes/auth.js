@@ -68,4 +68,15 @@ router.post('/logout', async (req, res) => {
   res.json({ data: { ok: true } });
 });
 
+// GET /api/auth/me — data user saat ini (untuk refresh info seperti warna)
+router.get('/me', async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, name, role, site_id, color')
+    .eq('id', req.user.id)
+    .maybeSingle();
+  if (error || !data) return res.status(500).json({ message: 'Gagal mengambil data user' });
+  res.json({ data });
+});
+
 export default router;
