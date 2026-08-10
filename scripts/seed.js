@@ -34,6 +34,7 @@ async function upsertUser(username, password, name, role) {
 }
 
 console.log('Menjalankan seed...');
+await upsertUser('owner', 'owner123', 'Owner', 'owner');
 await upsertUser('admin', 'admin123', 'Administrator', 'admin');
 await upsertUser('satpam', 'satpam123', 'Satpam Contoh', 'satpam');
 console.log('Seed selesai.');

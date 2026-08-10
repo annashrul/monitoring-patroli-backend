@@ -14,13 +14,14 @@ export function authRequired(req, res, next) {
   }
 }
 
-/** Middleware: batasi endpoint untuk role tertentu. */
-export function requireRole(role) {
+/** Middleware: batasi endpoint untuk role tertentu. owner bisa akses semua endpoint admin. */
+export function requireRole(...roles) {
   return (req, res, next) => {
-    if (req.user?.role !== role) {
-      return res.status(403).json({ message: 'Anda tidak memiliki akses' });
-    }
-    next();
+    const userRole = req.user?.role;
+    if (!userRole) return res.status(403).json({ message: 'Anda tidak memiliki akses' });
+    if (userRole === 'owner') return next();
+    if (roles.includes(userRole)) return next();
+    return res.status(403).json({ message: 'Anda tidak memiliki akses' });
   };
 }
 

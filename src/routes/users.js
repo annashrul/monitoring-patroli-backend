@@ -5,11 +5,11 @@ import { requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
-// Semua endpoint users hanya untuk admin
-router.use(requireRole('admin'));
+// Semua endpoint users untuk admin & owner
+router.use(requireRole('admin', 'owner'));
 
-const ROLES = ['admin', 'satpam'];
-const SAFE_SELECT = 'id, username, name, role, is_active, created_at';
+const ROLES = ['owner', 'admin', 'satpam'];
+const SAFE_SELECT = 'id, username, name, role, site_id, device_token, is_active, created_at';
 
 // GET /api/users
 router.get('/', async (req, res) => {
@@ -20,17 +20,21 @@ router.get('/', async (req, res) => {
 
 // POST /api/users
 router.post('/', async (req, res) => {
-  const { username, password, name, role } = req.body || {};
+  const { username, password, name, role, site_id } = req.body || {};
   if (!username || !password || !name || !ROLES.includes(role)) {
     return res
       .status(400)
-      .json({ message: 'Username, password, nama, dan role (admin/satpam) wajib diisi' });
+      .json({ message: 'Username, password, nama, dan role (owner/admin/satpam) wajib diisi' });
   }
 
   const password_hash = await bcrypt.hash(password, 10);
+  const insertData = { username, password_hash, name, role };
+  if (site_id) insertData.site_id = site_id;
+  else if (role !== 'owner') insertData.site_id = null;
+
   const { data, error } = await supabase
     .from('users')
-    .insert({ username, password_hash, name, role })
+    .insert(insertData)
     .select(SAFE_SELECT)
     .single();
 
@@ -43,13 +47,14 @@ router.post('/', async (req, res) => {
 
 // PUT /api/users/:id
 router.put('/:id', async (req, res) => {
-  const { name, role, is_active, password } = req.body || {};
+  const { name, role, site_id, is_active, password } = req.body || {};
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (role !== undefined) {
     if (!ROLES.includes(role)) return res.status(400).json({ message: 'Role tidak valid' });
     updates.role = role;
   }
+  if (site_id !== undefined) updates.site_id = site_id || null;
   if (is_active !== undefined) updates.is_active = !!is_active;
   if (password) updates.password_hash = await bcrypt.hash(password, 10);
 
@@ -63,6 +68,17 @@ router.put('/:id', async (req, res) => {
   if (error) return res.status(500).json({ message: 'Gagal mengubah user' });
   if (!data) return res.status(404).json({ message: 'User tidak ditemukan' });
   res.json({ data });
+});
+
+// POST /api/users/:id/release — lepas device binding (admin/owner)
+router.post('/:id/release', async (req, res) => {
+  const { error } = await supabase
+    .from('users')
+    .update({ device_token: null })
+    .eq('id', req.params.id);
+
+  if (error) return res.status(500).json({ message: 'Gagal melepas sesi' });
+  res.json({ data: { id: req.params.id } });
 });
 
 // DELETE /api/users/:id

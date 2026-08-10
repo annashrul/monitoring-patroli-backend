@@ -12,6 +12,7 @@ const normalize = (s) => ({
   name: s.name,
   start_time: String(s.start_time).slice(0, 5),
   end_time: String(s.end_time).slice(0, 5),
+  site_id: s.site_id || null,
   is_active: s.is_active,
 });
 
@@ -39,24 +40,26 @@ router.get('/current', async (req, res) => {
   }
 });
 
-// POST /api/shifts — admin
-router.post('/', requireRole('admin'), async (req, res) => {
-  const { name, start_time, end_time } = req.body || {};
+// POST /api/shifts — admin & owner
+router.post('/', requireRole('admin', 'owner'), async (req, res) => {
+  const { name, start_time, end_time, site_id } = req.body || {};
   if (!name || !TIME_RE.test(start_time || '') || !TIME_RE.test(end_time || '')) {
     return res.status(400).json({ message: 'Nama dan jam (format HH:MM) wajib diisi dengan benar' });
   }
+  const insertData = { name, start_time, end_time };
+  if (site_id) insertData.site_id = site_id;
   const { data, error } = await supabase
     .from('shifts')
-    .insert({ name, start_time, end_time })
+    .insert(insertData)
     .select()
     .single();
   if (error) return res.status(500).json({ message: 'Gagal membuat shift' });
   res.status(201).json({ data: normalize(data) });
 });
 
-// PUT /api/shifts/:id — admin
-router.put('/:id', requireRole('admin'), async (req, res) => {
-  const { name, start_time, end_time, is_active } = req.body || {};
+// PUT /api/shifts/:id — admin & owner
+router.put('/:id', requireRole('admin', 'owner'), async (req, res) => {
+  const { name, start_time, end_time, site_id, is_active } = req.body || {};
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (start_time !== undefined) {
@@ -67,6 +70,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
     if (!TIME_RE.test(end_time)) return res.status(400).json({ message: 'Format jam harus HH:MM' });
     updates.end_time = end_time;
   }
+  if (site_id !== undefined) updates.site_id = site_id || null;
   if (is_active !== undefined) updates.is_active = !!is_active;
 
   const { data, error } = await supabase
@@ -81,8 +85,8 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
   res.json({ data: normalize(data) });
 });
 
-// DELETE /api/shifts/:id — admin
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+// DELETE /api/shifts/:id — admin & owner
+router.delete('/:id', requireRole('admin', 'owner'), async (req, res) => {
   const { error } = await supabase.from('shifts').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ message: 'Gagal menghapus shift' });
   res.json({ data: { id: req.params.id } });
