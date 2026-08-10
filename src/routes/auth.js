@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { supabase } from '../supabase.js';
-import { signToken } from '../middleware/auth.js';
+import { signToken, authRequired } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -69,7 +69,7 @@ router.post('/logout', async (req, res) => {
 });
 
 // GET /api/auth/me — data user saat ini (untuk refresh info seperti warna)
-router.get('/me', async (req, res) => {
+router.get('/me', authRequired, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select('id, username, name, role, site_id, color')
