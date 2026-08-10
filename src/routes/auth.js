@@ -26,15 +26,28 @@ router.post('/login', async (req, res) => {
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ message: 'Username atau password salah' });
 
-  // Device binding hanya untuk satpam
+  // Device binding untuk satpam: 1 device ↔ 1 akun (bidirectional)
   if (user.role === 'satpam') {
     if (!device_id) {
       return res.status(400).json({ message: 'Device ID diperlukan untuk login satpam' });
     }
-    // Jika sudah ada device_token dan berbeda → blokir
+
+    // Cek apakah device_id ini sudah dipakai oleh akun satpam LAIN
+    const { data: otherUser } = await supabase
+      .from('users')
+      .select('id, name')
+      .eq('device_token', device_id)
+      .neq('id', user.id)
+      .maybeSingle();
+    if (otherUser) {
+      return res.status(403).json({ message: `Perangkat ini sudah terdaftar untuk ${otherUser.name}. Hubungi admin untuk melepas sesi.` });
+    }
+
+    // Cek apakah akun ini sudah login di perangkat LAIN
     if (user.device_token && user.device_token !== device_id) {
       return res.status(403).json({ message: 'Akun sedang digunakan di perangkat lain. Hubungi admin untuk melepas sesi.' });
     }
+
     // Update device_token & last_login
     await supabase
       .from('users')

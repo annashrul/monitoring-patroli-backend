@@ -9,6 +9,10 @@ function emitPostsChanged(req, siteId) {
   req.app.get('io')?.emit('posts:changed', { site_id: siteId });
 }
 
+function emitSitesChanged(req) {
+  req.app.get('io')?.emit('sites:changed', {});
+}
+
 function isValidPolygon(polygon) {
   return (
     Array.isArray(polygon) &&
@@ -26,9 +30,13 @@ function isValidPolygon(polygon) {
   );
 }
 
-// GET /api/sites — admin & satpam
+// GET /api/sites — admin & owner lihat semua, satpam hanya lihat yang aktif
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase.from('sites').select('*').order('created_at');
+  let query = supabase.from('sites').select('*').order('created_at');
+  if (req.user?.role === 'satpam') {
+    query = query.eq('is_active', true);
+  }
+  const { data, error } = await query;
   if (error) return res.status(500).json({ message: 'Gagal mengambil data site' });
   res.json({ data });
 });
@@ -67,6 +75,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
   const { data, error } = await supabase.from('sites').insert({ name, polygon }).select().single();
   if (error) return res.status(500).json({ message: 'Gagal membuat site' });
   emitPostsChanged(req, data.id);
+  emitSitesChanged(req);
   res.status(201).json({ data });
 });
 
@@ -93,6 +102,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
   if (error) return res.status(500).json({ message: 'Gagal mengubah site' });
   if (!data) return res.status(404).json({ message: 'Site tidak ditemukan' });
   emitPostsChanged(req, data.id);
+  emitSitesChanged(req);
   res.json({ data });
 });
 
@@ -112,6 +122,7 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
   const { error } = await supabase.from('sites').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ message: 'Gagal menghapus site' });
   emitPostsChanged(req, req.params.id);
+  emitSitesChanged(req);
   res.json({ data: { id: req.params.id } });
 });
 
