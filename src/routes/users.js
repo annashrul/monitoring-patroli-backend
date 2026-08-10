@@ -75,6 +75,10 @@ router.put('/:id', async (req, res) => {
 
   if (error) return res.status(500).json({ message: 'Gagal mengubah user' });
   if (!data) return res.status(404).json({ message: 'User tidak ditemukan' });
+  // Emit ke satpam jika color/site_id berubah
+  if (color !== undefined || site_id !== undefined) {
+    emitToUser(req.params.id, 'user:updated', { color: data.color, site_id: data.site_id });
+  }
   res.json({ data });
 });
 
