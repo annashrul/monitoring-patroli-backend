@@ -30,13 +30,19 @@ export function createSocketServer(httpServer) {
       socket.join('admins');
     }
 
-    // Satpam: terima update lokasi, simpan ke DB & broadcast ke admin
+    // Satpam: terima update lokasi, simpan ke DB & broadcast ke admin + sesama satpam
     if (socket.user.role === 'satpam') {
       let userColor = '#3B82F6';
+      let userSiteId = socket.user.site_id;
+
+      // Join ke room site agar bisa lihat sesama satpam
+      if (userSiteId) {
+        socket.join(`site:${userSiteId}`);
+        console.log(`${socket.user.name} bergabung ke room site:${userSiteId}`);
+      }
 
       socket.on('location:update', async (data) => {
-        // Re-fetch color setiap update agar perubahan admin langsung terlihat
-        const { data: u } = await supabase.from('users').select('color').eq('id', socket.user.id).maybeSingle();
+        const { data: u } = await supabase.from('users').select('color, site_id').eq('id', socket.user.id).maybeSingle();
         if (u?.color) userColor = u.color;
 
         console.log(`📍 Lokasi ${socket.user.name}: ${data.latitude}, ${data.longitude}`);
@@ -48,14 +54,20 @@ export function createSocketServer(httpServer) {
             last_location_at: new Date().toISOString(),
           })
           .eq('id', socket.user.id);
-        io.to('admins').emit('satpam:location', {
+
+        const payload = {
           id: socket.user.id,
           name: socket.user.name,
           latitude: data.latitude,
           longitude: data.longitude,
           color: userColor,
           timestamp: new Date().toISOString(),
-        });
+        };
+
+        io.to('admins').emit('satpam:location', payload);
+        if (userSiteId) {
+          io.to(`site:${userSiteId}`).emit('satpam:otherLocation', payload);
+        }
       });
     }
 
@@ -63,6 +75,9 @@ export function createSocketServer(httpServer) {
       console.log(`Socket terputus: ${socket.user.name}`);
       if (socket.user.role === 'satpam') {
         io.to('admins').emit('satpam:offline', { id: socket.user.id });
+        if (socket.user.site_id) {
+          io.to(`site:${socket.user.site_id}`).emit('satpam:otherOffline', { id: socket.user.id });
+        }
       }
     });
   });
