@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
 import { haversineMeters } from '../utils/geo.js';
-import { getCurrentShiftInfo } from '../services/shiftService.js';
 
 const router = Router();
 
@@ -59,24 +58,6 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // Cek apakah pos sudah discan pada periode shift ini
-  let already = false;
-  try {
-    const { period } = await getCurrentShiftInfo();
-    if (period) {
-      const { count } = await supabase
-        .from('scan_logs')
-        .select('id', { count: 'exact', head: true })
-        .eq('post_id', post.id)
-        .eq('status', 'ok')
-        .gte('scanned_at', period.start.toISOString())
-        .lt('scanned_at', period.end.toISOString());
-      already = (count ?? 0) > 0;
-    }
-  } catch {
-    // abaikan, already_scanned tetap false
-  }
-
   const { data: log, error } = await supabase
     .from('scan_logs')
     .insert({
@@ -98,7 +79,6 @@ router.post('/', async (req, res) => {
     site_id: post.site_id,
     scanned_at: log.scanned_at,
     scanned_by: { id: req.user.id, name: req.user.name },
-    already_scanned: already,
   });
 
   res.json({
@@ -108,7 +88,6 @@ router.post('/', async (req, res) => {
       post_name: post.name,
       scanned_at: log.scanned_at,
       distance_m: distanceRounded,
-      already_scanned: already,
       message: 'Patroli berhasil dicatat',
     },
   });
