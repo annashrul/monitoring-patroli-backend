@@ -4,6 +4,7 @@ import cors from 'cors';
 import config from './config.js';
 import { createSocketServer } from './socket.js';
 import { startShiftWatcher } from './services/shiftWatcher.js';
+import { supabase } from './supabase.js';
 import { authRequired } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import sitesRoutes from './routes/sites.js';
@@ -21,6 +22,16 @@ app.use(express.json());
 
 // Publik
 app.get('/api/health', (req, res) => res.json({ data: { status: 'ok' } }));
+app.get('/api/config/status-labels', async (req, res) => {
+  const { data, error } = await supabase.from('app_config').select('key,value').in('key', ['label_green','label_yellow','label_red','color_green','color_yellow','color_red']);
+  const config = {};
+  (data || []).forEach((r) => { config[r.key] = r.value; });
+  res.json({ data: {
+    green:  { label: config.label_green  || 'Aman',        color: config.color_green  || '#16a34a' },
+    yellow: { label: config.label_yellow || 'Scan Ulang',  color: config.color_yellow || '#f59e0b' },
+    red:    { label: config.label_red    || 'Belum',       color: config.color_red    || '#dc2626' },
+  }});
+});
 app.use('/api/auth', authRoutes);
 
 // Terproteksi (JWT)
