@@ -62,6 +62,7 @@ router.get('/:siteId/posts', async (req, res) => {
       latitude: p.latitude,
       longitude: p.longitude,
       radius_m: p.radius_m,
+      interval_minutes: p.interval_minutes,
       ...(isAdmin ? { qr_token: p.qr_token } : {}),
       is_active: p.is_active,
       status: p.status,

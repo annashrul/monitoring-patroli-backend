@@ -33,43 +33,39 @@ router.get('/', async (req, res) => {
       const { data: allPosts } = await supabase.from('posts').select('*').order('created_at');
       if (!allPosts?.length) return res.json({ data: [] });
 
-      let period = null;
-      try {
-        const shiftService = await import('../services/shiftService.js');
-        ({ period } = await shiftService.getCurrentShiftInfo());
-      } catch { period = null; }
-
+      const now = new Date();
       const lastByPost = new Map();
-      if (period) {
-        const { data: logs } = await supabase
-          .from('scan_logs')
-          .select('post_id, scanned_at, users(name)')
-          .in('post_id', allPosts.map((p) => p.id))
-          .eq('status', 'ok')
-          .gte('scanned_at', period.start.toISOString())
-          .lt('scanned_at', period.end.toISOString())
-          .order('scanned_at', { ascending: false });
-        for (const log of logs || []) {
-          if (!lastByPost.has(log.post_id)) {
-            lastByPost.set(log.post_id, {
-              scanned_at: log.scanned_at,
-              scanned_by_name: log.users?.name ?? '-',
-            });
-          }
+
+      const { data: logs } = await supabase
+        .from('scan_logs')
+        .select('post_id, scanned_at, users(name)')
+        .in('post_id', allPosts.map((p) => p.id))
+        .eq('status', 'ok')
+        .order('scanned_at', { ascending: false });
+      for (const log of logs || []) {
+        if (!lastByPost.has(log.post_id)) {
+          lastByPost.set(log.post_id, {
+            scanned_at: log.scanned_at,
+            scanned_by_name: log.users?.name ?? '-',
+          });
         }
       }
 
-      const data = allPosts.map((p) => ({
-        id: p.id,
-        site_id: p.site_id,
-        name: p.name,
-        latitude: p.latitude,
-        longitude: p.longitude,
-        radius_m: p.radius_m,
-        is_active: p.is_active,
-        status: lastByPost.has(p.id) ? 'scanned' : 'pending',
-        last_scan: lastByPost.get(p.id) ?? null,
-      }));
+      const data = allPosts.map((p) => {
+        const last = lastByPost.get(p.id) ?? null;
+        const interval = (p.interval_minutes || 120) * 60 * 1000;
+        let status = 'red';
+        if (last) {
+          const elapsed = now - new Date(last.scanned_at);
+          if (elapsed < interval) status = 'green';
+          else if (elapsed < interval * 2) status = 'yellow';
+        }
+        return {
+          id: p.id, site_id: p.site_id, name: p.name, latitude: p.latitude,
+          longitude: p.longitude, radius_m: p.radius_m, interval_minutes: p.interval_minutes,
+          is_active: p.is_active, status, last_scan: last,
+        };
+      });
       return res.json({ data });
     }
 
@@ -82,9 +78,9 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/posts — admin
-router.post('/', requireRole('admin'), async (req, res) => {
-  const { site_id, name, latitude, longitude, radius_m } = req.body || {};
+// POST /api/posts — admin & owner
+router.post('/', requireRole('admin', 'owner'), async (req, res) => {
+  const { site_id, name, latitude, longitude, radius_m, interval_minutes } = req.body || {};
   if (!site_id || !name || !validLatLng(latitude, longitude) || !validRadius(radius_m)) {
     return res
       .status(400)
@@ -99,9 +95,10 @@ router.post('/', requireRole('admin'), async (req, res) => {
   }
 
   const qr_token = crypto.randomBytes(16).toString('hex');
+  const interval = (interval_minutes != null && interval_minutes >= 10 && interval_minutes <= 1440) ? interval_minutes : 120;
   const { data, error } = await supabase
     .from('posts')
-    .insert({ site_id, name, latitude, longitude, radius_m, qr_token })
+    .insert({ site_id, name, latitude, longitude, radius_m, qr_token, interval_minutes: interval })
     .select()
     .single();
 
@@ -110,8 +107,8 @@ router.post('/', requireRole('admin'), async (req, res) => {
   res.status(201).json({ data });
 });
 
-// PUT /api/posts/:id — admin
-router.put('/:id', requireRole('admin'), async (req, res) => {
+// PUT /api/posts/:id — admin & owner
+router.put('/:id', requireRole('admin', 'owner'), async (req, res) => {
   const { data: existing } = await supabase
     .from('posts')
     .select('*')
@@ -119,7 +116,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
     .maybeSingle();
   if (!existing) return res.status(404).json({ message: 'Pos tidak ditemukan' });
 
-  const { name, latitude, longitude, radius_m, is_active } = req.body || {};
+  const { name, latitude, longitude, radius_m, interval_minutes, is_active } = req.body || {};
   const newLat = latitude !== undefined ? latitude : existing.latitude;
   const newLng = longitude !== undefined ? longitude : existing.longitude;
 
@@ -142,6 +139,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
   const updates = { latitude: newLat, longitude: newLng };
   if (name !== undefined) updates.name = name;
   if (radius_m !== undefined) updates.radius_m = radius_m;
+  if (interval_minutes !== undefined) updates.interval_minutes = interval_minutes;
   if (is_active !== undefined) updates.is_active = !!is_active;
 
   const { data, error } = await supabase
@@ -156,8 +154,8 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
   res.json({ data });
 });
 
-// DELETE /api/posts/:id — admin
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+// DELETE /api/posts/:id — admin & owner
+router.delete('/:id', requireRole('admin', 'owner'), async (req, res) => {
   const { data: existing } = await supabase
     .from('posts')
     .select('id, site_id')
