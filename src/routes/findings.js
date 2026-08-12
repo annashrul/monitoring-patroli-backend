@@ -60,7 +60,7 @@ router.get('/:id/whatsapp', async (req, res) => {
   const text = `🚨 *FINDINGS REPORT*\n\n📋 *Category:* ${data.category}\n👤 *Reporter:* ${data.user?.name || '-'}\n📍 *Location:* ${data.latitude ? `https://maps.google.com/?q=${data.latitude},${data.longitude}` : '-'}\n📝 *Description:* ${data.description}${data.photo_url ? `\n📷 *Photo:* ${data.photo_url}` : ''}\n🕐 *Time:* ${new Date(data.created_at).toLocaleString('id-ID')}`;
 
   const encoded = encodeURIComponent(text);
-  const waUrl = `https://wa.me/?text=${encoded}`;
+  const waUrl = `whatsapp://send?text=${encoded}`;
 
   await supabase.from('findings').update({ whatsapp_sent: true }).eq('id', req.params.id);
   res.json({ data: { whatsapp_url: waUrl } });
