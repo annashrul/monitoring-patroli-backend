@@ -86,6 +86,7 @@ router.post('/', async (req, res) => {
       scan_log_id: log.id,
       post_id: post.id,
       post_name: post.name,
+      site_id: post.site_id,
       scanned_at: log.scanned_at,
       distance_m: distanceRounded,
       message: 'Patroli berhasil dicatat',
