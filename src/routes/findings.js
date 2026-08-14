@@ -6,13 +6,35 @@ const router = Router();
 
 const CATEGORIES = ['general', 'security', 'cleanliness', 'damage', 'other'];
 
-// GET /api/findings?site_id=
+// GET /api/findings?site_id=&search=&page=&limit=
 router.get('/', async (req, res) => {
-  let q = supabase.from('findings').select('*, user:users(id,name)').order('created_at', { ascending: false }).limit(200);
+  const page = parseInt(req.query.page, 10);
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const hasPagination = Number.isInteger(page) && page > 0 && Number.isInteger(limit) && limit > 0;
+
+  let q = supabase
+    .from('findings')
+    .select('*, user:users(id,name)', { count: 'exact' })
+    .order('created_at', { ascending: false });
+
   if (req.query.site_id) q = q.eq('site_id', req.query.site_id);
-  const { data, error } = await q;
+  if (req.query.search) q = q.ilike('description', `%${String(req.query.search).trim()}%`);
+
+  if (hasPagination) {
+    q = q.range((page - 1) * limit, page * limit - 1);
+  } else {
+    q = q.limit(limit);
+  }
+
+  const { data, error, count } = await q;
   if (error) return res.status(500).json({ message: 'Gagal memuat data findings' });
-  res.json({ data });
+
+  const total = count ?? (data?.length ?? 0);
+  const meta = hasPagination
+    ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+    : { total };
+
+  res.json({ data, meta });
 });
 
 // POST /api/findings
