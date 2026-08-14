@@ -13,15 +13,39 @@ const ROLES = ['owner', 'admin', 'satpam'];
 const SAFE_SELECT = 'id, username, name, role, site_id, device_token, color, is_active, created_at';
 
 // GET /api/users — owner lihat semua, admin lihat user di site-nya saja
+// Query opsional: search, page, limit
 router.get('/', async (req, res) => {
-  let query = supabase.from('users').select(SAFE_SELECT).order('created_at');
+  const page = parseInt(req.query.page, 10);
+  const limit = parseInt(req.query.limit, 10);
+  const hasPagination = Number.isInteger(page) && page > 0 && Number.isInteger(limit) && limit > 0;
+
+  let query = supabase
+    .from('users')
+    .select(SAFE_SELECT, { count: 'exact' })
+    .order('created_at');
+
   const scope = await getScopeFilter(req);
   if (scope) {
     query = query.or(`site_id.eq.${scope},role.eq.owner`);
   }
-  const { data, error } = await query;
+  if (req.query.search) {
+    const term = `%${String(req.query.search).trim()}%`;
+    query = query.or(`name.ilike.${term},username.ilike.${term}`);
+  }
+
+  if (hasPagination) {
+    query = query.range((page - 1) * limit, page * limit - 1);
+  }
+
+  const { data, error, count } = await query;
   if (error) return res.status(500).json({ message: 'Gagal mengambil data user' });
-  res.json({ data });
+
+  const total = count ?? (data?.length ?? 0);
+  const meta = hasPagination
+    ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+    : { total };
+
+  res.json({ data, meta });
 });
 
 // POST /api/users
