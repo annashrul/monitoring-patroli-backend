@@ -47,28 +47,30 @@ router.get('/', async (req, res) => {
 
 // GET /api/sites/:siteId/posts — admin & satpam (qr_token hanya untuk admin)
 // admin dengan site_id hanya bisa akses posts di site-nya
+// Query opsional: search, page, limit
 router.get('/:siteId/posts', async (req, res) => {
   try {
     const scope = await getScopeFilter(req);
     if (scope && req.params.siteId !== scope) {
       return res.status(403).json({ message: 'Anda tidak memiliki akses ke site ini' });
     }
-    const posts = await getPostsWithStatus(req.params.siteId);
+
+    const page = parseInt(req.query.page, 10);
+    const limit = parseInt(req.query.limit, 10);
     const isAdmin = req.user.role === 'admin' || req.user.role === 'owner';
-    const data = posts.map((p) => ({
-      id: p.id,
-      site_id: p.site_id,
-      name: p.name,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      radius_m: p.radius_m,
-      interval_minutes: p.interval_minutes,
-      ...(isAdmin ? { qr_token: p.qr_token } : {}),
-      is_active: p.is_active,
-      status: p.status,
-      last_scan: p.last_scan,
-    }));
-    res.json({ data });
+
+    const { data: posts, total } = await getPostsWithStatus(req.params.siteId, {
+      search: req.query.search ? String(req.query.search).trim() : '',
+      page: Number.isInteger(page) && page > 0 ? page : undefined,
+      limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+      includeQrToken: isAdmin,
+    });
+
+    const meta = page && limit
+      ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+      : { total };
+
+    res.json({ data: posts, meta });
   } catch {
     res.status(500).json({ message: 'Gagal mengambil data pos' });
   }

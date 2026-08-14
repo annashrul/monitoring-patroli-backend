@@ -1,21 +1,40 @@
 import { supabase } from '../supabase.js';
 
 /**
- * Ambil semua posts suatu site beserta status patroli (tanpa shift, interval-based):
+ * Ambil posts beserta status patroli (tanpa shift, interval-based):
  *
  * - green   : scan terakhir dalam interval (interval_minutes)
  * - yellow  : scan terakhir antara interval s/d 2×interval (grace period)
  * - red     : belum pernah discan, atau melebihi 2×interval
+ *
+ * Opsi:
+ * - siteId       : null/undefined berarti semua site
+ * - search       : filter nama pos (case-insensitive)
+ * - page, limit  : pagination (bila keduanya integer valid)
+ * - includeQrToken : sertakan qr_token pada hasil (default true)
+ *
+ * Return: { data, total }
  */
-export async function getPostsWithStatus(siteId) {
-  const { data: posts, error } = await supabase
-    .from('posts')
-    .select('*')
-    .eq('site_id', siteId)
-    .order('created_at');
+export async function getPostsWithStatus(siteId, opts = {}) {
+  const { search, page, limit, includeQrToken = true } = opts;
+
+  let query = supabase.from('posts').select('*', { count: 'exact' });
+  if (siteId) query = query.eq('site_id', siteId);
+  if (search) {
+    query = query.ilike('name', `%${search}%`);
+  }
+  query = query.order('created_at');
+
+  if (Number.isInteger(page) && Number.isInteger(limit) && page > 0 && limit > 0) {
+    query = query.range((page - 1) * limit, page * limit - 1);
+  }
+
+  const { data: posts, error, count } = await query;
 
   if (error) throw error;
-  if (!posts?.length) return [];
+
+  const total = count ?? (posts?.length ?? 0);
+  if (!posts?.length) return { data: [], total };
 
   const now = new Date();
   const lastScanMap = new Map();
@@ -37,7 +56,7 @@ export async function getPostsWithStatus(siteId) {
     }
   }
 
-  return posts.map((p) => {
+  const data = posts.map((p) => {
     const lastScan = lastScanMap.get(p.id) ?? null;
     const interval = (p.interval_minutes || 120) * 60 * 1000; // ms
     let status = 'red';
@@ -53,18 +72,23 @@ export async function getPostsWithStatus(siteId) {
       }
     }
 
-    return {
+    const item = {
       id: p.id,
       site_id: p.site_id,
       name: p.name,
       latitude: p.latitude,
       longitude: p.longitude,
       radius_m: p.radius_m,
-      qr_token: p.qr_token,
       interval_minutes: p.interval_minutes,
       is_active: p.is_active,
       status,
       last_scan: lastScan,
     };
+
+    if (includeQrToken) item.qr_token = p.qr_token;
+
+    return item;
   });
+
+  return { data, total };
 }

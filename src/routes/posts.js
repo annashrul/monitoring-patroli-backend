@@ -27,52 +27,43 @@ function validRadius(r) {
 }
 
 // GET /api/posts?all=true — owner lihat semua posts dari semua site dengan status
+// Query opsional: search, page, limit
 router.get('/', async (req, res) => {
   try {
     if (req.query.all === 'true' && req.user?.role === 'owner') {
-      const { data: allPosts } = await supabase.from('posts').select('*').order('created_at');
-      if (!allPosts?.length) return res.json({ data: [] });
+      const page = parseInt(req.query.page, 10);
+      const limit = parseInt(req.query.limit, 10);
 
-      const now = new Date();
-      const lastByPost = new Map();
-
-      const { data: logs } = await supabase
-        .from('scan_logs')
-        .select('post_id, scanned_at, users(name)')
-        .in('post_id', allPosts.map((p) => p.id))
-        .eq('status', 'ok')
-        .order('scanned_at', { ascending: false });
-      for (const log of logs || []) {
-        if (!lastByPost.has(log.post_id)) {
-          lastByPost.set(log.post_id, {
-            scanned_at: log.scanned_at,
-            scanned_by_name: log.users?.name ?? '-',
-          });
-        }
-      }
-
-      const data = allPosts.map((p) => {
-        const last = lastByPost.get(p.id) ?? null;
-        const interval = (p.interval_minutes || 120) * 60 * 1000;
-        let status = 'red';
-        if (last) {
-          const elapsed = now - new Date(last.scanned_at);
-          if (elapsed < interval) status = 'green';
-          else if (elapsed < interval * 2) status = 'yellow';
-        }
-        return {
-          id: p.id, site_id: p.site_id, name: p.name, latitude: p.latitude,
-          longitude: p.longitude, radius_m: p.radius_m, interval_minutes: p.interval_minutes,
-          is_active: p.is_active, status, last_scan: last,
-        };
+      const { data, total } = await getPostsWithStatus(null, {
+        search: req.query.search ? String(req.query.search).trim() : '',
+        page: Number.isInteger(page) && page > 0 ? page : undefined,
+        limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+        includeQrToken: true,
       });
-      return res.json({ data });
+
+      const meta = page && limit
+        ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+        : { total };
+
+      return res.json({ data, meta });
     }
 
     const siteId = req.query.site_id;
     if (!siteId) return res.status(400).json({ message: 'site_id atau all=true diperlukan' });
-    const posts = await getPostsWithStatus(siteId);
-    res.json({ data: posts });
+    const page = parseInt(req.query.page, 10);
+    const limit = parseInt(req.query.limit, 10);
+    const { data: posts, total } = await getPostsWithStatus(siteId, {
+      search: req.query.search ? String(req.query.search).trim() : '',
+      page: Number.isInteger(page) && page > 0 ? page : undefined,
+      limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+      includeQrToken: req.user?.role === 'admin' || req.user?.role === 'owner',
+    });
+
+    const meta = page && limit
+      ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+      : { total };
+
+    res.json({ data: posts, meta });
   } catch (e) {
     res.status(500).json({ message: 'Gagal mengambil data pos' });
   }

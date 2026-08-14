@@ -5,19 +5,24 @@ import { startOfDayInTimezone } from '../utils/time.js';
 
 const router = Router();
 
-// GET /api/scan-logs?site_id=&post_id=&user_id=&date=YYYY-MM-DD — admin
+// GET /api/scan-logs?site_id=&post_id=&user_id=&date=YYYY-MM-DD&page=&limit= — admin
 // admin dengan site_id otomatis difilter ke site-nya
+// Query opsional: page, limit
 router.get('/', requireRole('admin', 'owner'), async (req, res) => {
   const { site_id, post_id, user_id, date } = req.query;
   const scope = await getScopeFilter(req);
 
+  const page = parseInt(req.query.page, 10);
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const hasPagination = Number.isInteger(page) && page > 0 && Number.isInteger(limit) && limit > 0;
+
   const postSelect = 'post:posts!inner(id, name, site_id)';
+  const select = `id, scanned_at, status, distance_m, latitude, longitude, kondisi, checklist, catatan, foto_url, ${postSelect}, user:users(id, name)`;
 
   let q = supabase
     .from('scan_logs')
-    .select(`id, scanned_at, status, distance_m, latitude, longitude, kondisi, checklist, catatan, foto_url, ${postSelect}, user:users(id, name)`)
-    .order('scanned_at', { ascending: false })
-    .limit(500);
+    .select(select, { count: 'exact' })
+    .order('scanned_at', { ascending: false });
 
   const filterSite = site_id || scope;
   if (filterSite) q = q.eq('posts.site_id', filterSite);
@@ -31,7 +36,13 @@ router.get('/', requireRole('admin', 'owner'), async (req, res) => {
     }
   }
 
-  const { data, error } = await q;
+  if (hasPagination) {
+    q = q.range((page - 1) * limit, page * limit - 1);
+  } else {
+    q = q.limit(limit);
+  }
+
+  const { data, error, count } = await q;
   if (error) return res.status(500).json({ message: 'Gagal mengambil riwayat scan' });
 
   const mapped = (data || []).map((row) => ({
@@ -49,7 +60,12 @@ router.get('/', requireRole('admin', 'owner'), async (req, res) => {
     user: row.user ? { id: row.user.id, name: row.user.name } : null,
   }));
 
-  res.json({ data: mapped });
+  const total = count ?? mapped.length;
+  const meta = hasPagination
+    ? { page, limit, total, total_pages: Math.ceil(total / limit) }
+    : { total };
+
+  res.json({ data: mapped, meta });
 });
 
 const KONDISI_VALID = ['aman', 'temuan', 'darurat'];
