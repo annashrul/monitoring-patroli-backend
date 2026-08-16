@@ -73,6 +73,12 @@ router.post('/', async (req, res) => {
 
   if (error) return res.status(500).json({ message: 'Gagal mencatat patroli' });
 
+  const { data: site } = await supabase
+    .from('sites')
+    .select('name')
+    .eq('id', post.site_id)
+    .maybeSingle();
+
   // Catatan: status pos (hijau) tidak berubah di sini. Pos baru dianggap
   // terpatroli setelah laporan dikirim lewat PUT /api/scan-logs/:id/report,
   // yang akan mengirim event `post:reported`.
@@ -83,6 +89,9 @@ router.post('/', async (req, res) => {
       post_id: post.id,
       post_name: post.name,
       site_id: post.site_id,
+      site_name: site?.name ?? null,
+      latitude: Number(post.latitude),
+      longitude: Number(post.longitude),
       scanned_at: log.scanned_at,
       distance_m: distanceRounded,
       message: 'Patroli berhasil dicatat',
