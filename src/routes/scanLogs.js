@@ -110,7 +110,7 @@ router.put('/:id/report', async (req, res) => {
 
   const { data: log } = await supabase
     .from('scan_logs')
-    .select('id, user_id, status')
+    .select('id, post_id, user_id, status, posts(site_id)')
     .eq('id', req.params.id)
     .maybeSingle();
 
@@ -141,6 +141,15 @@ router.put('/:id/report', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ message: 'Gagal menyimpan laporan' });
+
+  // Broadcast status pos (hijau) setelah laporan tersimpan.
+  req.app.get('io')?.emit('post:reported', {
+    post_id: log.post_id,
+    site_id: log.posts?.site_id ?? null,
+    scanned_at: new Date().toISOString(),
+    scanned_by: { id: req.user.id, name: req.user.name },
+  });
+
   res.json({ data: { ...data, message: 'Laporan patroli tersimpan' } });
 });
 

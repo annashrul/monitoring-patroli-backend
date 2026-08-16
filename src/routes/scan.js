@@ -73,13 +73,9 @@ router.post('/', async (req, res) => {
 
   if (error) return res.status(500).json({ message: 'Gagal mencatat patroli' });
 
-  // Broadcast realtime ke semua client (web admin & android)
-  req.app.get('io')?.emit('post:scanned', {
-    post_id: post.id,
-    site_id: post.site_id,
-    scanned_at: log.scanned_at,
-    scanned_by: { id: req.user.id, name: req.user.name },
-  });
+  // Catatan: status pos (hijau) tidak berubah di sini. Pos baru dianggap
+  // terpatroli setelah laporan dikirim lewat PUT /api/scan-logs/:id/report,
+  // yang akan mengirim event `post:reported`.
 
   res.json({
     data: {

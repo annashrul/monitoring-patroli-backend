@@ -3,9 +3,12 @@ import { supabase } from '../supabase.js';
 /**
  * Ambil posts beserta status patroli (tanpa shift, interval-based):
  *
- * - green   : scan terakhir dalam interval (interval_minutes)
- * - yellow  : scan terakhir antara interval s/d 2×interval (grace period)
- * - red     : belum pernah discan, atau melebihi 2×interval
+ * Pos dianggap terpatroli (green/yellow) hanya jika laporan patroli sudah
+ * dikirim (scan_logs berstatus 'ok' DAN kolom kondisi tidak null).
+ *
+ * - green   : laporan terakhir dalam interval (interval_minutes)
+ * - yellow  : laporan terakhir antara interval s/d 2×interval (grace period)
+ * - red     : belum pernah discan/dilaporkan, atau melebihi 2×interval
  *
  * Opsi:
  * - siteId       : null/undefined berarti semua site
@@ -39,12 +42,13 @@ export async function getPostsWithStatus(siteId, opts = {}) {
   const now = new Date();
   const lastScanMap = new Map();
 
-  // Ambil scan terakhir untuk setiap post (tanpa filter periode — semua waktu)
+  // Ambil laporan terakhir untuk setiap post (hanya scan yang sudah ada laporannya)
   const { data: logs } = await supabase
     .from('scan_logs')
     .select('post_id, scanned_at, users(name)')
     .in('post_id', posts.map((p) => p.id))
     .eq('status', 'ok')
+    .not('kondisi', 'is', null)
     .order('scanned_at', { ascending: false });
 
   for (const log of logs || []) {
