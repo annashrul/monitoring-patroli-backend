@@ -25,9 +25,21 @@ router.get('/', async (req, res) => {
     .order('created_at');
 
   const scope = await getScopeFilter(req);
+  const siteId = req.query.site_id ? String(req.query.site_id).trim() : null;
+  const excludeOwner = req.query.exclude_owner === 'true';
+
   if (scope) {
+    // Admin hanya melihat user di site-nya sendiri (plus owner).
     query = query.or(`site_id.eq.${scope},role.eq.owner`);
+  } else if (siteId) {
+    // Owner bisa memfilter satu site tertentu.
+    query = query.eq('site_id', siteId);
   }
+
+  if (excludeOwner) {
+    query = query.neq('role', 'owner');
+  }
+
   if (req.query.search) {
     const term = `%${String(req.query.search).trim()}%`;
     query = query.or(`name.ilike.${term},username.ilike.${term}`);
