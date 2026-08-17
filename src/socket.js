@@ -89,3 +89,8 @@ export function createSocketServer(httpServer) {
 export function emitToUser(userId, event, data) {
   if (io) io.to(`user:${userId}`).emit(event, data);
 }
+
+/** Akses instance io (dipakai bridge MQTT untuk re-emit event lokasi). */
+export function getIo() {
+  return io;
+}

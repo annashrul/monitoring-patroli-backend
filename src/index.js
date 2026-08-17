@@ -3,6 +3,7 @@ import http from 'http';
 import cors from 'cors';
 import config from './config.js';
 import { createSocketServer } from './socket.js';
+import { startMqttClient } from './mqtt.js';
 import { supabase } from './supabase.js';
 import { authRequired } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
@@ -56,6 +57,8 @@ app.use((err, req, res, next) => {
 const server = http.createServer(app);
 const io = createSocketServer(server);
 app.set('io', io);
+
+startMqttClient(); // bridge MQTT (live tracking satpam)
 
 server.listen(config.port, () => {
   console.log(`Backend berjalan di http://localhost:${config.port}`);

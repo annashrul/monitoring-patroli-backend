@@ -8,6 +8,9 @@ const config = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-ganti-di-production',
   appTimezone: process.env.APP_TIMEZONE || 'Asia/Jakarta',
+  mqttUrl: process.env.MQTT_URL || '',
+  mqttUsername: process.env.MQTT_USERNAME || '',
+  mqttPassword: process.env.MQTT_PASSWORD || '',
 };
 
 export default config;
