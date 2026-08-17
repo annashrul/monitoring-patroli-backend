@@ -78,13 +78,26 @@ router.get('/:siteId/posts', async (req, res) => {
 
 // POST /api/sites — admin
 router.post('/', requireRole('admin'), async (req, res) => {
-  const { name, polygon } = req.body || {};
+  const { name, polygon, location_history_interval_ms, location_min_distance_m } = req.body || {};
   if (!name || !isValidPolygon(polygon)) {
     return res
       .status(400)
       .json({ message: 'Nama dan polygon (minimal 3 titik) wajib diisi dengan benar' });
   }
-  const { data, error } = await supabase.from('sites').insert({ name, polygon }).select().single();
+  const insert = { name, polygon };
+  if (location_history_interval_ms !== undefined) {
+    if (!Number.isInteger(location_history_interval_ms) || location_history_interval_ms < 1000) {
+      return res.status(400).json({ message: 'Interval riwayat lokasi minimal 1000 ms (1 detik)' });
+    }
+    insert.location_history_interval_ms = location_history_interval_ms;
+  }
+  if (location_min_distance_m !== undefined) {
+    if (typeof location_min_distance_m !== 'number' || location_min_distance_m < 0) {
+      return res.status(400).json({ message: 'Jarak minimum lokasi tidak valid' });
+    }
+    insert.location_min_distance_m = location_min_distance_m;
+  }
+  const { data, error } = await supabase.from('sites').insert(insert).select().single();
   if (error) return res.status(500).json({ message: 'Gagal membuat site' });
   emitPostsChanged(req, data.id);
   emitSitesChanged(req);
@@ -93,7 +106,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
 
 // PUT /api/sites/:id — admin
 router.put('/:id', requireRole('admin'), async (req, res) => {
-  const { name, polygon, is_active } = req.body || {};
+  const { name, polygon, is_active, location_history_interval_ms, location_min_distance_m } = req.body || {};
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (polygon !== undefined) {
@@ -103,6 +116,18 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
     updates.polygon = polygon;
   }
   if (is_active !== undefined) updates.is_active = !!is_active;
+  if (location_history_interval_ms !== undefined) {
+    if (!Number.isInteger(location_history_interval_ms) || location_history_interval_ms < 1000) {
+      return res.status(400).json({ message: 'Interval riwayat lokasi minimal 1000 ms (1 detik)' });
+    }
+    updates.location_history_interval_ms = location_history_interval_ms;
+  }
+  if (location_min_distance_m !== undefined) {
+    if (typeof location_min_distance_m !== 'number' || location_min_distance_m < 0) {
+      return res.status(400).json({ message: 'Jarak minimum lokasi tidak valid' });
+    }
+    updates.location_min_distance_m = location_min_distance_m;
+  }
 
   const { data, error } = await supabase
     .from('sites')

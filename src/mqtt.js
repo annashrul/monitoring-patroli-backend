@@ -12,6 +12,36 @@ const lastHistoryWrite = new Map(); // userId -> epoch ms
 // Posisi terakhir yang benar-benar tercatat per user (untuk deteksi pergerakan).
 const lastRecorded = new Map(); // userId -> { latitude, longitude }
 
+// Cache setting lokasi per site (interval + jarak minimum), dengan TTL.
+const siteSettingsCache = new Map(); // siteId -> { interval, minDistance, ts }
+const SITE_SETTINGS_TTL_MS = 30000;
+
+/** Ambil setting lokasi sebuah site (fallback ke nilai global di config). */
+async function getSiteSettings(siteId) {
+  const fallback = {
+    interval: config.locationHistoryIntervalMs,
+    minDistance: config.locationMinDistanceM,
+  };
+  if (!siteId) return fallback;
+
+  const cached = siteSettingsCache.get(siteId);
+  if (cached && Date.now() - cached.ts < SITE_SETTINGS_TTL_MS) return cached;
+
+  const { data } = await supabase
+    .from('sites')
+    .select('location_history_interval_ms, location_min_distance_m')
+    .eq('id', siteId)
+    .maybeSingle();
+
+  const settings = {
+    interval: Math.max(1000, data?.location_history_interval_ms ?? fallback.interval),
+    minDistance: Math.max(0, data?.location_min_distance_m ?? fallback.minDistance),
+    ts: Date.now(),
+  };
+  siteSettingsCache.set(siteId, settings);
+  return settings;
+}
+
 /**
  * Bridge MQTT → DB + Socket.IO untuk live tracking satpam.
  *
@@ -77,17 +107,26 @@ async function handleLocation(userId, data) {
     })
     .eq('id', userId);
 
-  // Simpan snapshot riwayat lokasi tiap interval (default 20 detik),
-  // tapi hanya jika satpam benar-benar berpindah (>= LOCATION_MIN_DISTANCE_M).
+  const { data: u } = await supabase
+    .from('users')
+    .select('name, color, site_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  // Setting per-site (interval & jarak minimum pergerakan).
+  const settings = await getSiteSettings(u?.site_id);
+
+  // Simpan snapshot riwayat lokasi tiap interval per-site, tapi hanya jika
+  // satpam benar-benar berpindah >= jarak minimum per-site.
   const now = Date.now();
   const last = lastHistoryWrite.get(userId) || 0;
-  if (now - last >= config.locationHistoryIntervalMs) {
+  if (now - last >= settings.interval) {
     lastHistoryWrite.set(userId, now);
     const prev = lastRecorded.get(userId);
     const moved =
       !prev ||
       haversineMeters(prev.latitude, prev.longitude, latitude, longitude) >=
-        config.locationMinDistanceM;
+        settings.minDistance;
     if (moved) {
       lastRecorded.set(userId, { latitude, longitude });
       const { error } = await supabase.from('satpam_locations').insert({
@@ -99,12 +138,6 @@ async function handleLocation(userId, data) {
       if (error) console.error('Gagal simpan riwayat lokasi:', error.message);
     }
   }
-
-  const { data: u } = await supabase
-    .from('users')
-    .select('name, color, site_id')
-    .eq('id', userId)
-    .maybeSingle();
 
   const payload = {
     id: userId,
