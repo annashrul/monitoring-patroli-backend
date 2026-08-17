@@ -2,11 +2,15 @@ import mqtt from 'mqtt';
 import config from './config.js';
 import { supabase } from './supabase.js';
 import { getIo } from './socket.js';
+import { haversineMeters } from './utils/geo.js';
 
 let client = null;
 
 // Throttle penyimpanan riwayat lokasi per user (default 20 detik).
 const lastHistoryWrite = new Map(); // userId -> epoch ms
+
+// Posisi terakhir yang benar-benar tercatat per user (untuk deteksi pergerakan).
+const lastRecorded = new Map(); // userId -> { latitude, longitude }
 
 /**
  * Bridge MQTT → DB + Socket.IO untuk live tracking satpam.
@@ -73,18 +77,27 @@ async function handleLocation(userId, data) {
     })
     .eq('id', userId);
 
-  // Simpan snapshot riwayat lokasi tiap interval (default 20 detik).
+  // Simpan snapshot riwayat lokasi tiap interval (default 20 detik),
+  // tapi hanya jika satpam benar-benar berpindah (>= LOCATION_MIN_DISTANCE_M).
   const now = Date.now();
   const last = lastHistoryWrite.get(userId) || 0;
   if (now - last >= config.locationHistoryIntervalMs) {
     lastHistoryWrite.set(userId, now);
-    const { error } = await supabase.from('satpam_locations').insert({
-      user_id: userId,
-      latitude,
-      longitude,
-      recorded_at: new Date().toISOString(),
-    });
-    if (error) console.error('Gagal simpan riwayat lokasi:', error.message);
+    const prev = lastRecorded.get(userId);
+    const moved =
+      !prev ||
+      haversineMeters(prev.latitude, prev.longitude, latitude, longitude) >=
+        config.locationMinDistanceM;
+    if (moved) {
+      lastRecorded.set(userId, { latitude, longitude });
+      const { error } = await supabase.from('satpam_locations').insert({
+        user_id: userId,
+        latitude,
+        longitude,
+        recorded_at: new Date().toISOString(),
+      });
+      if (error) console.error('Gagal simpan riwayat lokasi:', error.message);
+    }
   }
 
   const { data: u } = await supabase

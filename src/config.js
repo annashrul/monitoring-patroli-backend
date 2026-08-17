@@ -12,6 +12,7 @@ const config = {
   mqttUsername: process.env.MQTT_USERNAME || '',
   mqttPassword: process.env.MQTT_PASSWORD || '',
   locationHistoryIntervalMs: parseInt(process.env.LOCATION_HISTORY_INTERVAL_MS || '20000', 10),
+  locationMinDistanceM: parseFloat(process.env.LOCATION_MIN_DISTANCE_M || '10'),
 };
 
 export default config;
