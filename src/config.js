@@ -11,6 +11,7 @@ const config = {
   mqttUrl: process.env.MQTT_URL || '',
   mqttUsername: process.env.MQTT_USERNAME || '',
   mqttPassword: process.env.MQTT_PASSWORD || '',
+  locationHistoryIntervalMs: parseInt(process.env.LOCATION_HISTORY_INTERVAL_MS || '20000', 10),
 };
 
 export default config;

@@ -16,6 +16,7 @@ import uploadRoutes from './routes/upload.js';
 import findingsRoutes from './routes/findings.js';
 import checklistItemsRoutes from './routes/checklistItems.js';
 import geoRoutes from './routes/geo.js';
+import locationsRoutes from './routes/locations.js';
 import { ensureBucket } from './supabase.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/upload', authRequired, uploadRoutes);
 app.use('/api/findings', authRequired, findingsRoutes);
 app.use('/api/checklist-items', authRequired, checklistItemsRoutes);
 app.use('/api/geo', authRequired, geoRoutes);
+app.use('/api/locations', authRequired, locationsRoutes);
 
 // 404 & error handler
 app.use((req, res) => res.status(404).json({ message: 'Endpoint tidak ditemukan' }));

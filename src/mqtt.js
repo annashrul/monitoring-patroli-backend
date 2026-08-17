@@ -5,6 +5,9 @@ import { getIo } from './socket.js';
 
 let client = null;
 
+// Throttle penyimpanan riwayat lokasi per user (default 20 detik).
+const lastHistoryWrite = new Map(); // userId -> epoch ms
+
 /**
  * Bridge MQTT → DB + Socket.IO untuk live tracking satpam.
  *
@@ -69,6 +72,20 @@ async function handleLocation(userId, data) {
       last_location_at: new Date().toISOString(),
     })
     .eq('id', userId);
+
+  // Simpan snapshot riwayat lokasi tiap interval (default 20 detik).
+  const now = Date.now();
+  const last = lastHistoryWrite.get(userId) || 0;
+  if (now - last >= config.locationHistoryIntervalMs) {
+    lastHistoryWrite.set(userId, now);
+    const { error } = await supabase.from('satpam_locations').insert({
+      user_id: userId,
+      latitude,
+      longitude,
+      recorded_at: new Date().toISOString(),
+    });
+    if (error) console.error('Gagal simpan riwayat lokasi:', error.message);
+  }
 
   const { data: u } = await supabase
     .from('users')
