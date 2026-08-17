@@ -85,6 +85,8 @@ export async function getPostsWithStatus(siteId, opts = {}) {
       radius_m: p.radius_m,
       interval_minutes: p.interval_minutes,
       is_active: p.is_active,
+      accuracy: p.accuracy ?? null,
+      gps_timestamp: p.gps_timestamp ?? null,
       status,
       last_scan: lastScan,
     };

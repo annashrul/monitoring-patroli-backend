@@ -26,6 +26,16 @@ function validRadius(r) {
   return Number.isInteger(r) && r >= 5 && r <= 500;
 }
 
+function validAccuracy(a) {
+  return typeof a === 'number' && Number.isFinite(a) && a >= 0;
+}
+
+function normalizeGpsTimestamp(ts) {
+  if (ts === undefined || ts === null || ts === '') return null;
+  const t = Date.parse(String(ts));
+  return Number.isNaN(t) ? undefined : new Date(t).toISOString();
+}
+
 // GET /api/posts?all=true — owner lihat semua posts dari semua site dengan status
 // Query opsional: search, page, limit
 router.get('/', async (req, res) => {
@@ -71,7 +81,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/posts — admin & owner
 router.post('/', requireRole('admin', 'owner'), async (req, res) => {
-  const { site_id, name, latitude, longitude, radius_m, interval_minutes } = req.body || {};
+  const { site_id, name, latitude, longitude, radius_m, interval_minutes, accuracy, gps_timestamp } = req.body || {};
   if (!site_id || !name || !validLatLng(latitude, longitude) || !validRadius(radius_m)) {
     return res
       .status(400)
@@ -87,9 +97,24 @@ router.post('/', requireRole('admin', 'owner'), async (req, res) => {
 
   const qr_token = crypto.randomBytes(16).toString('hex');
   const interval = (interval_minutes != null && interval_minutes >= 10 && interval_minutes <= 1440) ? interval_minutes : 120;
+
+  const insert = { site_id, name, latitude, longitude, radius_m, qr_token, interval_minutes: interval };
+
+  if (accuracy !== undefined && accuracy !== null) {
+    if (!validAccuracy(accuracy)) {
+      return res.status(400).json({ message: 'Accuracy tidak valid' });
+    }
+    insert.accuracy = accuracy;
+  }
+  const gpsTs = normalizeGpsTimestamp(gps_timestamp);
+  if (gpsTs === undefined) {
+    return res.status(400).json({ message: 'gps_timestamp tidak valid' });
+  }
+  if (gpsTs !== null) insert.gps_timestamp = gpsTs;
+
   const { data, error } = await supabase
     .from('posts')
-    .insert({ site_id, name, latitude, longitude, radius_m, qr_token, interval_minutes: interval })
+    .insert(insert)
     .select()
     .single();
 
@@ -107,7 +132,7 @@ router.put('/:id', requireRole('admin', 'owner'), async (req, res) => {
     .maybeSingle();
   if (!existing) return res.status(404).json({ message: 'Pos tidak ditemukan' });
 
-  const { name, latitude, longitude, radius_m, interval_minutes, is_active } = req.body || {};
+  const { name, latitude, longitude, radius_m, interval_minutes, is_active, accuracy, gps_timestamp } = req.body || {};
   const newLat = latitude !== undefined ? latitude : existing.latitude;
   const newLng = longitude !== undefined ? longitude : existing.longitude;
 
@@ -132,6 +157,19 @@ router.put('/:id', requireRole('admin', 'owner'), async (req, res) => {
   if (radius_m !== undefined) updates.radius_m = radius_m;
   if (interval_minutes !== undefined) updates.interval_minutes = interval_minutes;
   if (is_active !== undefined) updates.is_active = !!is_active;
+  if (accuracy !== undefined) {
+    if (accuracy !== null && !validAccuracy(accuracy)) {
+      return res.status(400).json({ message: 'Accuracy tidak valid' });
+    }
+    updates.accuracy = accuracy;
+  }
+  if (gps_timestamp !== undefined) {
+    const gpsTs = normalizeGpsTimestamp(gps_timestamp);
+    if (gpsTs === undefined) {
+      return res.status(400).json({ message: 'gps_timestamp tidak valid' });
+    }
+    updates.gps_timestamp = gpsTs;
+  }
 
   const { data, error } = await supabase
     .from('posts')
