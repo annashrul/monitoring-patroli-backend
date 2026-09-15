@@ -16,7 +16,7 @@ router.get('/', requireRole('admin', 'owner'), async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 20;
   const hasPagination = Number.isInteger(page) && page > 0 && Number.isInteger(limit) && limit > 0;
 
-  const postSelect = 'post:posts!inner(id, name, site_id)';
+  const postSelect = 'post:posts!inner(id, name, site_id, latitude, longitude)';
   const select = `id, scanned_at, status, distance_m, latitude, longitude, kondisi, checklist, catatan, foto_url, ${postSelect}, user:users(id, name)`;
 
   let q = supabase
@@ -56,7 +56,14 @@ router.get('/', requireRole('admin', 'owner'), async (req, res) => {
     checklist: row.checklist ?? null,
     catatan: row.catatan ?? null,
     foto_url: row.foto_url ?? null,
-    post: row.post ? { id: row.post.id, name: row.post.name } : null,
+    post: row.post
+      ? {
+          id: row.post.id,
+          name: row.post.name,
+          latitude: row.post.latitude,
+          longitude: row.post.longitude,
+        }
+      : null,
     user: row.user ? { id: row.user.id, name: row.user.name } : null,
   }));
 
